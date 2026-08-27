@@ -6,6 +6,7 @@ const port = Number(process.env.PORT || 3000);
 const verifyToken = process.env.VERIFY_TOKEN;
 const appSecret = process.env.APP_SECRET;
 const facebookAppId = process.env.FACEBOOK_APP_ID || "2473856919758911";
+const facebookAppSecret = process.env.FACEBOOK_APP_SECRET || appSecret;
 const publicBaseUrl = process.env.PUBLIC_BASE_URL || "https://gia-linh-messenger-webhook.onrender.com";
 const allowedStaffIds = new Set((process.env.STAFF_FACEBOOK_IDS || "").split(",").map((id) => id.trim()).filter(Boolean));
 if (!verifyToken || !appSecret) process.exit(1);
@@ -65,10 +66,11 @@ function loginPage(error = "") {
 }
 
 function dashboardPage() {
-  return page("Trợ lý Messenger", `<main class="wrap"><div class="row"><div><h1 style="margin-bottom:4px">Trợ lý Messenger</h1><p class="muted" style="margin-top:0">Gợi ý mới từ fanpage · tự làm mới mỗi 10 giây</p></div><form method="post" action="/assistant/logout"><button type="submit">Đăng xuất</button></form></div><section id="list" aria-live="polite"><div class="card">Đang tải gợi ý…</div></section></main><script>
+  return page("Trợ lý Messenger", `<main class="wrap"><div class="row"><div><h1 style="margin-bottom:4px">Trợ lý Messenger</h1><p class="muted" style="margin-top:0">AI phân loại tin nhắn · sale chọn sao chép, sửa hoặc gửi sau khi duyệt</p></div><form method="post" action="/assistant/logout"><button type="submit">Đăng xuất</button></form></div><section id="list" aria-live="polite"><div class="card">Đang tải gợi ý…</div></section></main><script>
   const escapeHtml=(value)=>String(value).replace(/[&<>'"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c]));
-  const card=(item)=>'<article class="card"><div class="row"><span class="tag">'+escapeHtml(item.intentLabel)+'</span><time class="muted">'+escapeHtml(new Date(item.receivedAt).toLocaleString('vi-VN'))+'</time></div><p class="muted">Khách: '+escapeHtml(item.message)+'</p><strong>Gợi ý trả lời</strong><pre>'+escapeHtml(item.suggestedReply)+'</pre><p><button data-copy="'+encodeURIComponent(item.suggestedReply)+'">Sao chép gợi ý</button></p></article>';
-  async function render(){const response=await fetch('/assistant/recent',{headers:{accept:'application/json'}});if(response.status===401){location='/assistant';return}const data=await response.json();const list=document.querySelector('#list');list.innerHTML=data.items.length?data.items.map(card).join(''):'<div class="card">Chưa có gợi ý mới.</div>';document.querySelectorAll('[data-copy]').forEach((button)=>button.onclick=async()=>{await navigator.clipboard.writeText(decodeURIComponent(button.dataset.copy));button.textContent='Đã sao chép';setTimeout(()=>button.textContent='Sao chép gợi ý',1200)});}
+  const accessLabel=(level)=>({standard:'Thông tin chuẩn',verify_current_policy:'Cần kiểm tra chính sách',needs_qualification:'Cần xác minh nhu cầu'})[level]||'Cần sale kiểm tra';
+  const card=(item)=>'<article class="card"><div class="row"><span class="tag">'+escapeHtml(item.intentLabel)+'</span><time class="muted">'+escapeHtml(new Date(item.receivedAt).toLocaleString('vi-VN'))+'</time></div><p class="muted">Khách: '+escapeHtml(item.message)+'</p><p class="muted"><strong>'+escapeHtml(accessLabel(item.accessLevel))+'</strong> · '+escapeHtml(item.accessNote||'')+'</p><strong>Gợi ý trả lời</strong><pre>'+escapeHtml(item.suggestedReply)+'</pre><p><button data-copy="'+encodeURIComponent(item.suggestedReply)+'">Sao chép</button> <button data-edit="'+encodeURIComponent(item.suggestedReply)+'">Sửa & sao chép</button> <button disabled title="Chỉ bật sau khi cấu hình Meta Send API và quy tắc duyệt">Gửi qua Meta</button></p></article>';
+  async function render(){const response=await fetch('/assistant/recent',{headers:{accept:'application/json'}});if(response.status===401){location='/assistant';return}const data=await response.json();const list=document.querySelector('#list');list.innerHTML=data.items.length?data.items.map(card).join(''):'<div class="card">Chưa có gợi ý mới.</div>';document.querySelectorAll('[data-copy]').forEach((button)=>button.onclick=async()=>{await navigator.clipboard.writeText(decodeURIComponent(button.dataset.copy));button.textContent='Đã sao chép';setTimeout(()=>button.textContent='Sao chép',1200)});document.querySelectorAll('[data-edit]').forEach((button)=>button.onclick=async()=>{const edited=prompt('Sửa gợi ý trước khi sao chép',decodeURIComponent(button.dataset.edit));if(edited===null)return;await navigator.clipboard.writeText(edited);button.textContent='Đã sao chép bản sửa';setTimeout(()=>button.textContent='Sửa & sao chép',1200)});}
   render();setInterval(render,10000);
   </script></body></html>`);
 }
@@ -116,7 +118,7 @@ const server = createServer(async (request, response) => {
       const redirectUri = `${publicBaseUrl}/auth/facebook/callback`;
       const tokenUrl = new URL("https://graph.facebook.com/v24.0/oauth/access_token");
       tokenUrl.searchParams.set("client_id", facebookAppId);
-      tokenUrl.searchParams.set("client_secret", appSecret);
+      tokenUrl.searchParams.set("client_secret", facebookAppSecret);
       tokenUrl.searchParams.set("redirect_uri", redirectUri);
       tokenUrl.searchParams.set("code", url.searchParams.get("code") || "");
       const token = await (await fetch(tokenUrl)).json();
