@@ -38,8 +38,13 @@ export function redact(text = "") {
 }
 
 export function classify(text = "") {
-  const normalized = String(text).toLocaleLowerCase("vi-VN");
-  const score = (list) => list.reduce((total, word) => total + (normalized.includes(word) ? 1 : 0), 0);
+  const foldVietnamese = (value) => String(value)
+    .toLocaleLowerCase("vi-VN")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d");
+  const normalized = foldVietnamese(text);
+  const score = (list) => list.reduce((total, word) => total + (normalized.includes(foldVietnamese(word)) ? 1 : 0), 0);
   const admissionScore = score(admissionsSignals);
   const recruitmentScore = score(recruitmentSignals);
   const qualificationScore = score(qualificationSignals);
@@ -58,7 +63,7 @@ export function classify(text = "") {
     return { audience: "recruitment", intent: "tuyen_dung", intentLabel: "Tuyển dụng", accessLevel, accessNote };
   }
   if (admissionScore > 0) {
-    const matched = intentRules.find((rule) => rule.words.some((word) => normalized.includes(word)));
+    const matched = intentRules.find((rule) => rule.words.some((word) => normalized.includes(foldVietnamese(word))));
     return {
       audience: "admissions",
       intent: matched?.intent || "tu_van_chung",
