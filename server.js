@@ -133,7 +133,8 @@ const server = createServer(async (request, response) => {
       if (!allowedStaffIds.size) console.info(JSON.stringify({ event: "dashboard_bootstrap_login", facebookId: String(profile.id) }));
       const expiresAt = Date.now() + sessionTtlMs;
       return response.writeHead(303, { "Set-Cookie": `assistant_session=${encodeURIComponent(createSession(profile.id, expiresAt))}; HttpOnly; Secure; SameSite=Strict; Path=/assistant; Max-Age=${sessionTtlMs / 1000}`, Location: "/assistant" }).end();
-    } catch {
+    } catch (error) {
+      console.error(JSON.stringify({ event: "dashboard_login_failed", reason: String(error?.message || "unknown") }));
       return response.writeHead(403, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }).end(loginPage("Tài khoản Facebook này chưa được cấp quyền."));
     }
   }
