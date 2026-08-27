@@ -7,6 +7,7 @@ const verifyToken = process.env.VERIFY_TOKEN;
 const appSecret = process.env.APP_SECRET;
 const facebookAppId = process.env.FACEBOOK_APP_ID || "2473856919758911";
 const facebookAppSecret = process.env.FACEBOOK_APP_SECRET || appSecret;
+const facebookLoginConfigId = process.env.FACEBOOK_LOGIN_CONFIG_ID || "";
 const publicBaseUrl = process.env.PUBLIC_BASE_URL || "https://gia-linh-messenger-webhook.onrender.com";
 const allowedStaffIds = new Set((process.env.STAFF_FACEBOOK_IDS || "").split(",").map((id) => id.trim()).filter(Boolean));
 if (!verifyToken || !appSecret) process.exit(1);
@@ -107,7 +108,12 @@ const server = createServer(async (request, response) => {
     loginUrl.searchParams.set("redirect_uri", redirectUri);
     loginUrl.searchParams.set("state", state);
     loginUrl.searchParams.set("response_type", "code");
-    loginUrl.searchParams.set("scope", "public_profile");
+    if (facebookLoginConfigId) {
+      loginUrl.searchParams.set("config_id", facebookLoginConfigId);
+      loginUrl.searchParams.set("override_default_response_type", "true");
+    } else {
+      loginUrl.searchParams.set("scope", "public_profile");
+    }
     return response.writeHead(302, { "Set-Cookie": `assistant_oauth_state=${state}.${sign(state)}; HttpOnly; Secure; SameSite=Strict; Path=/auth/facebook; Max-Age=600`, Location: loginUrl.toString() }).end();
   }
   if (url.pathname === "/auth/facebook/callback" && request.method === "GET") {
