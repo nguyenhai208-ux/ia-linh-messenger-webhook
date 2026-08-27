@@ -20,6 +20,17 @@ const intentRules = [
   { intent: "chuong_trinh", label: "Chương trình học", words: ["chương trình", "tiếng anh", "hoạt động", "phương pháp"] }
 ];
 
+const qualificationSignals = [
+  "tháng", "tuổi", "sinh năm", "cơ sở", "khu vực", "dự kiến", "nhập học",
+  "tham quan", "đến trường", "bé nhà", "con tôi", "con em", "con nhà"
+];
+
+const controlledInformationSignals = [
+  "học phí", "chi phí", "giá", "đơn giá", "đóng tiền", "ưu đãi", "khuyến mãi",
+  "giảm giá", "giữ chỗ", "đặt cọc", "hoàn phí", "thanh toán", "hợp đồng",
+  "sĩ số", "tỷ lệ", "camera", "quy trình", "lương", "doanh thu"
+];
+
 export function redact(text = "") {
   return String(text)
     .replace(/(?:\\+?84|0)(?:[ .-]?\\d){8,10}/g, "[SĐT]")
@@ -31,17 +42,38 @@ export function classify(text = "") {
   const score = (list) => list.reduce((total, word) => total + (normalized.includes(word) ? 1 : 0), 0);
   const admissionScore = score(admissionsSignals);
   const recruitmentScore = score(recruitmentSignals);
+  const qualificationScore = score(qualificationSignals);
+  const controlledInformationScore = score(controlledInformationSignals);
+  const accessLevel = controlledInformationScore > 0 && qualificationScore < 2
+    ? "needs_qualification"
+    : controlledInformationScore > 0
+      ? "verify_current_policy"
+      : "standard";
+  const accessNote = accessLevel === "needs_qualification"
+    ? "Chỉ gợi ý thông tin khái quát; xin thêm tuổi bé, cơ sở hoặc thời điểm dự kiến trước khi đưa số liệu/chính sách chi tiết."
+    : accessLevel === "verify_current_policy"
+      ? "Có thể gợi ý nội dung chi tiết sau khi sale đối chiếu bảng phí/chính sách hiện hành."
+      : "Có thể dùng gợi ý chuẩn; sale vẫn kiểm tra ngữ cảnh trước khi gửi.";
   if (recruitmentScore > admissionScore && recruitmentScore > 0) {
-    return { audience: "recruitment", intent: "tuyen_dung", intentLabel: "Tuyển dụng" };
+    return { audience: "recruitment", intent: "tuyen_dung", intentLabel: "Tuyển dụng", accessLevel, accessNote };
   }
   if (admissionScore > 0) {
     const matched = intentRules.find((rule) => rule.words.some((word) => normalized.includes(word)));
-    return { audience: "admissions", intent: matched?.intent || "tu_van_chung", intentLabel: matched?.label || "Tư vấn tuyển sinh chung" };
+    return {
+      audience: "admissions",
+      intent: matched?.intent || "tu_van_chung",
+      intentLabel: matched?.label || "Tư vấn tuyển sinh chung",
+      accessLevel,
+      accessNote
+    };
   }
-  return { audience: "unclear", intent: "phan_loai", intentLabel: "Cần xác định nhu cầu" };
+  return { audience: "unclear", intent: "phan_loai", intentLabel: "Cần xác định nhu cầu", accessLevel, accessNote };
 }
 
 export function suggestReply(classification) {
+  if (classification.accessLevel === "needs_qualification") {
+    return "Dạ để gửi thông tin phù hợp và chính xác, anh/chị cho em xin tháng/năm sinh của bé, cơ sở hoặc khu vực quan tâm và thời điểm dự kiến đi học ạ. Em sẽ kiểm tra đúng thông tin rồi phản hồi mình ngay.";
+  }
   if (classification.audience === "recruitment") {
     return "Dạ, cảm ơn anh/chị đã quan tâm cơ hội việc làm tại Gia Linh FNG. Anh/chị cho em xin vị trí mong muốn, cơ sở thuận tiện và CV hoặc số điện thoại để bộ phận tuyển dụng phản hồi đúng thông tin ạ.";
   }
