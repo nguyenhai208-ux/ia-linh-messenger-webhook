@@ -1,2 +1,8 @@
 .env
-data/
+node_modules/
+
+# data/ holds runtime output, but suggestions-v10.json is NOT runtime data —
+# src/suggestion-engine.js imports it at module load, so the service cannot
+# start without it. It must ship with the code or any deploy crashes on boot.
+data/*
+!data/suggestions-v10.json
