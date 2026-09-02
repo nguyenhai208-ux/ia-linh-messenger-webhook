@@ -107,9 +107,32 @@ AI chỉ tạo nháp. Con người chịu trách nhiệm duyệt và gửi.
 - **Phát hiện quan trọng:** đã có sẵn hạ tầng production từ trước (không phải do phiên làm việc này dựng) — Meta app "Chat bot" (`2473856919758911`) đã đăng ký Messenger + webhook, và một bản deploy khác trên Render (`gia-linh-messenger-webhook.onrender.com`, kéo từ GitHub `nguyenhai208-ux/ia-linh-messenger-webhook`) đã chạy sẵn một dashboard nội bộ cho sale (đăng nhập bằng Facebook, xem gợi ý, copy/sửa rồi tự gửi tay) — nhưng dùng luật từ khóa tự chế, không dùng thư viện 138 kịch bản, và chỉ lưu tạm trong bộ nhớ (mất khi restart), không ghi Lark Base.
 - **Đã ghép 2 bản lại**: giữ khung dashboard + đăng nhập Facebook đang chạy, thay ruột gợi ý bằng thư viện 138 kịch bản đã duyệt + bộ lọc an toàn 2 mức, nối thêm ghi Lark Base tự động khi có tin nhắn thật. Đã kiểm thử qua service local: gửi 1 tin nhắn giả dạng thật qua `/webhook` → hiện đúng trong dashboard → tự ghi vào Lark Base → xóa sạch bản ghi test sau khi xác nhận. 18/18 test kỹ thuật đạt (bổ sung 3 test mới cho đúng luồng webhook → dashboard, vì lỗ hổng "tin thật nhưng không ai kiểm tra có tạo gợi ý không" từng khiến lỗi bảng Lark trước đây lọt qua).
 - Sửa lỗi sẽ làm sập deploy: script `start` cũ dùng `node --env-file=.env`, trên Render không có file `.env` nên sẽ crash ngay khi khởi động — đã tách `start` (không cần `.env`) và `dev` (dùng `.env`, cho máy local).
+- **Đã push và merge thành công lên GitHub** (`git merge --allow-unrelated-histories` để giữ nguyên lịch sử 9 commit cũ, không ép/xóa gì) và **Render đã tự build + deploy bản ghép** — xác nhận qua `/healthz` (đúng field mới: thư viện 138, `outbound_sending:false`), `/webhook` (403 đúng khi token sai), `/assistant` (hiện trang đăng nhập Facebook).
+- **Đã thêm biến `INTERNAL_API_KEY`** còn thiếu trên Render (nguyên nhân khiến bản deploy đầu tiên bị crash exit code 1) — đã sinh giá trị ngẫu nhiên, không có ở đâu khác ngoài Render.
 
-Còn lại — cần bạn xác nhận/thao tác trước khi đẩy code lên Render:
+- **Đã bật đồng bộ Lark Base cho production** (2026-09-01, theo xác nhận của bạn): thêm `LARK_BASE_SYNC_ENABLED=true`, `LARK_APP_ID`, `LARK_APP_SECRET` vào Render, redeploy thành công, `/healthz` xác nhận `lark_base_sync: true`.
 
-- Đẩy code đã ghép lên GitHub (`git push`) để Render tự động deploy bản mới.
-- Đối chiếu lại biến môi trường trên Render cho khớp: `APP_SECRET` phải là secret thật (32 ký tự hex) của app "Chat bot", `VERIFY_TOKEN` phải khớp đúng "Xác minh mã" đã khai trên Meta, và cần đặt `STAFF_FACEBOOK_IDS` — hiện đang để trống nghĩa là **bất kỳ tài khoản Facebook nào đăng nhập cũng vào được dashboard**.
-- Xác nhận Render đã build đúng bản mới (kiểm tra `/healthz` trả về đúng field mới), rồi gửi 1 tin nhắn thật qua Fanpage để xác nhận luồng thật hoạt động đầu-cuối.
+Còn lại — cần bạn xác nhận/thao tác:
+
+- **Đặt `STAFF_FACEBOOK_IDS`** trên Render — hiện để trống nghĩa là **bất kỳ tài khoản Facebook nào đăng nhập cũng vào được dashboard `/assistant`**. Cần bạn cung cấp Facebook ID của (các) sale được phép dùng.
+- `APP_SECRET`/`VERIFY_TOKEN` trên Render giữ nguyên giá trị cũ (không đụng vào, không đọc giá trị) vì Meta đã xác minh thành công với các giá trị này từ trước.
+- **Gửi 1 tin nhắn thật qua Fanpage** để xác nhận luồng đầu-cuối với traffic Messenger thật (đã test kỹ code path tương đương ở local, nhưng chưa xác nhận với Meta thật vì không đọc secret Render để tự giả lập). Sau khi gửi, kiểm tra bảng Lark `Messenger AI – Thử nghiệm` có bản ghi mới + đăng nhập `/assistant` xem gợi ý hiện ra.
+
+## 8. Sự cố phát hiện 2026-09-02: đăng nhập dashboard bị chặn — cần xác minh doanh nghiệp
+
+Khi thử đăng nhập `/assistant` bằng tài khoản Facebook "Nguyễn Hải" (đã có vai trò Quản trị viên trên app "Chat bot"), Facebook trả về màn hình lỗi **"Ứng dụng không hoạt động"** — chặn ngay từ phía Facebook, không hề chạm tới server (xác nhận qua log Render trống hoàn toàn trong 24h, dù thành công hay thất bại đều phải được log).
+
+**Đã loại trừ các nguyên nhân khác** trước khi kết luận đúng nguyên nhân:
+- Redirect URI trên Meta khớp chính xác với `PUBLIC_BASE_URL` code đang dùng.
+- `FACEBOOK_LOGIN_CONFIG_ID` trên Render (`2115795552640771`) khớp đúng config "Trợ lý Messenger nội bộ" trên Meta.
+- Tài khoản test đã có vai trò Quản trị viên trên app.
+
+**Nguyên nhân thật**: tính năng "Đăng nhập bằng Facebook **cho doanh nghiệp**" (Facebook Login for Business) — sản phẩm mà server đang dùng vì có `FACEBOOK_LOGIN_CONFIG_ID` — yêu cầu **Xác minh doanh nghiệp** (Business Verification) mới hoạt động được, kể cả với tài khoản Quản trị viên ở chế độ phát triển. Đây là hạn chế đặc thù của sản phẩm "Login for Business" (khác với Facebook Login thường).
+
+**Đã thực hiện (2026-09-02)**: bạn đã tạo hồ sơ doanh nghiệp trên Meta Business Suite tên "Công ty Cổ phần Gia Linh FNG" và gửi thông tin xác minh cho pháp nhân "GIA LINH FNG JOINT STOCK COMPANY". Trạng thái hiện tại: **"Đang xem xét"** — Meta báo cần khoảng 2 ngày làm việc để duyệt.
+
+**Việc này không liên quan đến thuế** — đây là bước Meta tự xác minh danh tính doanh nghiệp (chống giả mạo), không phải thủ tục với cơ quan thuế và Meta không chia sẻ thông tin này cho cơ quan thuế. Giấy tờ dùng để xác minh (giấy đăng ký kinh doanh) có chứa mã số thuế công ty vì ở Việt Nam đó cũng là số đăng ký kinh doanh, nhưng việc gửi cho Meta không tạo ra nghĩa vụ thuế mới nào.
+
+**Sau khi Meta duyệt xong (~2 ngày)**: quay lại thử đăng nhập `/assistant` bằng tài khoản Facebook thật — lúc đó "Ứng dụng không hoạt động" sẽ hết, và có thể tiếp tục đặt `STAFF_FACEBOOK_IDS` + xác nhận luồng thật đầu-cuối (mục còn lại ở trên).
+
+**Lối tắt đã cân nhắc nhưng chưa áp dụng**: có thể bỏ `FACEBOOK_LOGIN_CONFIG_ID` trên Render để code tự chuyển về Facebook Login thường (không cần xác minh doanh nghiệp, xem nhánh `else` trong `/auth/facebook` ở `server.js`) — nhưng chưa chắc app đã bật sẵn use case Facebook Login thường (hiện chỉ thấy "Đăng nhập bằng Facebook cho doanh nghiệp" trong danh sách use case), nên có thể cần thêm bước cấu hình trên Meta trước khi thử. Bạn đã chọn đi thẳng theo đường xác minh doanh nghiệp chính thức thay vì lối tắt này.
