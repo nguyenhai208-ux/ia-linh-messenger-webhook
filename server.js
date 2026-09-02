@@ -161,7 +161,11 @@ export const server = createServer(async (request, response) => {
     } else {
       loginUrl.searchParams.set("scope", "public_profile");
     }
-    return response.writeHead(302, { "Set-Cookie": `assistant_oauth_state=${state}.${sign(state)}; HttpOnly; Secure; SameSite=Strict; Path=/auth/facebook; Max-Age=600`, Location: loginUrl.toString() }).end();
+    // SameSite=Lax (not Strict): this cookie must survive the top-level
+    // cross-site GET redirect Facebook sends back to /auth/facebook/callback.
+    // Strict is elided on cross-site top-level navigation, which broke every
+    // login with a generic "not_allowed" (state never matched).
+    return response.writeHead(302, { "Set-Cookie": `assistant_oauth_state=${state}.${sign(state)}; HttpOnly; Secure; SameSite=Lax; Path=/auth/facebook; Max-Age=600`, Location: loginUrl.toString() }).end();
   }
 
   if (url.pathname === "/auth/facebook/callback" && request.method === "GET") {
